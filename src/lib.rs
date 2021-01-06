@@ -3,57 +3,6 @@ pub fn init_panic_hook() {
     console_error_panic_hook::set_once();
 }
 
-use once_cell::sync::Lazy;
-static GAME_BUFFER: Lazy<Vec<cetkaik_full_state_transition::state::A>> = Lazy::new(|| {
-    use cetkaik_full_state_transition::*;
-    let mut ans = vec![];
-
-    let initial_state = initial_state();
-    let initial_state: probabilistic::Prob<_> = initial_state.into();
-    let (initial_state, _nonexistent_ciurl) = initial_state.choose();
-
-    let mut current_state: state::A = initial_state;
-
-    loop {
-        use cetkaik_full_state_transition::message::binary::Binary;
-        let (adequate_normal_move, resulting_prob_density) = loop {
-            let msg = message::NormalMove::random_choice();
-            match apply_normal_move(&current_state, msg, Config::cerke_online_alpha()) {
-                Err(_) => continue,
-                Ok(prob) => break (msg, prob),
-            }
-        };
-
-        let resulting_prob_density: probabilistic::Prob<_> = resulting_prob_density.into();
-        let (hand_not_resolved, maybe_ciurl) = resulting_prob_density.choose();
-        let next_state = match resolve(&hand_not_resolved, Config::cerke_online_alpha()) {
-            state::HandResolved::HandExists { if_tymok, if_taxot } => {
-                // FIXME: always chooses taxot
-                match if_taxot {
-                    IfTaxot::VictoriousSide(victor) => break,
-                    IfTaxot::NextSeason(prob_distribution) => {
-                        let prob_distribution: probabilistic::Prob<_> = prob_distribution.into();
-                        let (next_state, _nonexistent_ciurl) = prob_distribution.choose();
-                        next_state
-                    }
-                }
-            }
-            state::HandResolved::NeitherTymokNorTaxot(next_state) => next_state,
-            state::HandResolved::GameEndsWithoutTymokTaxot(_) => break,
-        };
-        ans.push(next_state.clone());
-        current_state = next_state;
-        
-        if ans.len() >= 20 {
-            break;
-        } else {
-            continue;
-        }
-    }
-
-    ans
-});
-
 extern crate console_error_panic_hook;
 use std::panic;
 
@@ -92,17 +41,45 @@ pub fn greet(s: &str) {
     alert(&format!("Hello, wasm-cetkaik! {}", s));
 }
 
-#[wasm_bindgen]
-pub fn get_game_length() -> usize {
-    GAME_BUFFER.len()
+pub fn yield_random_next(current_state: &cetkaik_full_state_transition::state::A) -> Option<cetkaik_full_state_transition::state::A> {
+    use cetkaik_full_state_transition::*;
+    use cetkaik_full_state_transition::message::binary::Binary;
+    let (adequate_normal_move, resulting_prob_density) = loop {
+        let msg = message::NormalMove::random_choice();
+        match apply_normal_move(&current_state, msg, Config::cerke_online_alpha()) {
+            Err(_) => continue,
+            Ok(prob) => break (msg, prob),
+        }
+    };
+
+    let resulting_prob_density: probabilistic::Prob<_> = resulting_prob_density.into();
+    let (hand_not_resolved, maybe_ciurl) = resulting_prob_density.choose();
+    let next_state = match resolve(&hand_not_resolved, Config::cerke_online_alpha()) {
+        state::HandResolved::HandExists { if_tymok, if_taxot } => {
+            // FIXME: always chooses taxot
+            match if_taxot {
+                IfTaxot::VictoriousSide(victor) => return None,
+                IfTaxot::NextSeason(prob_distribution) => {
+                    let prob_distribution: probabilistic::Prob<_> = prob_distribution.into();
+                    let (next_state, _nonexistent_ciurl) = prob_distribution.choose();
+                    next_state
+                }
+            }
+        }
+        state::HandResolved::NeitherTymokNorTaxot(next_state) => next_state,
+        state::HandResolved::GameEndsWithoutTymokTaxot(_) => return None,
+    };
+
+    Some(next_state)
 }
 
 #[wasm_bindgen]
-pub fn send_example_to_js(ind: usize) -> JsValue {
-    JsValue::from_serde(&GAME_BUFFER[ind]).unwrap()
-}
+pub fn send_example_to_js() -> JsValue {
+    let initial_state = cetkaik_full_state_transition::initial_state();
+    let initial_state: cetkaik_full_state_transition::probabilistic::Prob<_> = initial_state.into();
+    let (initial_state, _nonexistent_ciurl) = initial_state.choose();
 
-#[wasm_bindgen]
-pub fn dump_game_buffer() -> JsValue {
-    JsValue::from_serde(&*GAME_BUFFER).unwrap()
+    let GAME_BUFFER = vec![initial_state];
+
+    JsValue::from_serde(&GAME_BUFFER).unwrap()
 }
