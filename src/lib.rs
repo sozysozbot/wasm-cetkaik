@@ -51,9 +51,20 @@ pub fn send_example_to_js() -> JsValue {
 
     let mut game_buffer = vec![initial_state.clone()];
 
-    if let Some(next_state) = yield_random_next(&initial_state, cetkaik_full_state_transition::Config::cerke_online_alpha()) {
-        game_buffer.push(next_state);
+    let mut current_state = initial_state;
+    loop {
+        if let Some(next_state) = yield_random_next(
+            &current_state,
+            cetkaik_full_state_transition::Config::cerke_online_alpha(),
+        ) {
+            game_buffer.push(next_state.clone());
+            current_state = next_state;
+        } else {
+            break;
+        }
     }
+
+    greet(&format!("{}", game_buffer.len()));
 
     JsValue::from_serde(&game_buffer).unwrap()
 }
