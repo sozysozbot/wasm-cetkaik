@@ -41,37 +41,7 @@ pub fn greet(s: &str) {
     alert(&format!("Hello, wasm-cetkaik! {}", s));
 }
 
-pub fn yield_random_next(current_state: &cetkaik_full_state_transition::state::A) -> Option<cetkaik_full_state_transition::state::A> {
-    use cetkaik_full_state_transition::*;
-    use cetkaik_full_state_transition::message::binary::Binary;
-    let (adequate_normal_move, resulting_prob_density) = loop {
-        let msg = message::NormalMove::random_choice();
-        match apply_normal_move(&current_state, msg, Config::cerke_online_alpha()) {
-            Err(_) => continue,
-            Ok(prob) => break (msg, prob),
-        }
-    };
-
-    let resulting_prob_density: probabilistic::Prob<_> = resulting_prob_density.into();
-    let (hand_not_resolved, maybe_ciurl) = resulting_prob_density.choose();
-    let next_state = match resolve(&hand_not_resolved, Config::cerke_online_alpha()) {
-        state::HandResolved::HandExists { if_tymok, if_taxot } => {
-            // FIXME: always chooses taxot
-            match if_taxot {
-                IfTaxot::VictoriousSide(victor) => return None,
-                IfTaxot::NextSeason(prob_distribution) => {
-                    let prob_distribution: probabilistic::Prob<_> = prob_distribution.into();
-                    let (next_state, _nonexistent_ciurl) = prob_distribution.choose();
-                    next_state
-                }
-            }
-        }
-        state::HandResolved::NeitherTymokNorTaxot(next_state) => next_state,
-        state::HandResolved::GameEndsWithoutTymokTaxot(_) => return None,
-    };
-
-    Some(next_state)
-}
+use cetkaik_random_play::yield_random_next;
 
 #[wasm_bindgen]
 pub fn send_example_to_js() -> JsValue {
@@ -79,7 +49,11 @@ pub fn send_example_to_js() -> JsValue {
     let initial_state: cetkaik_full_state_transition::probabilistic::Prob<_> = initial_state.into();
     let (initial_state, _nonexistent_ciurl) = initial_state.choose();
 
-    let GAME_BUFFER = vec![initial_state];
+    let mut game_buffer = vec![initial_state.clone()];
 
-    JsValue::from_serde(&GAME_BUFFER).unwrap()
+    if let Some(next_state) = yield_random_next(&initial_state, cetkaik_full_state_transition::Config::cerke_online_alpha()) {
+        game_buffer.push(next_state);
+    }
+
+    JsValue::from_serde(&game_buffer).unwrap()
 }
